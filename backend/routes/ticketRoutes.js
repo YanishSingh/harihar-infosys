@@ -1,7 +1,7 @@
 // backend/routes/ticketRoutes.js
 
 const express = require('express');
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const router = express.Router();
 const {
   createTicket,
@@ -41,17 +41,51 @@ router.post(
   createTicket
 );
 
-// Company views their tickets
+// Company views their tickets (with pagination & optional status filter)
 router.get(
   '/company',
+  [
+    query('page')
+      .optional()
+      .isInt({ gt: 0 })
+      .withMessage('page must be a positive integer'),
+    query('limit')
+      .optional()
+      .isInt({ gt: 0 })
+      .withMessage('limit must be a positive integer'),
+    query('status')
+      .optional()
+      .isIn(['Pending', 'Assigned', 'In Progress', 'Completed'])
+      .withMessage('status filter must be one of Pending, Assigned, In Progress, or Completed')
+  ],
+  validate,
   protect,
   authorize('Company'),
   getCompanyTickets
 );
 
-// Admin views all tickets
+// Admin views all tickets (with pagination & optional filters)
 router.get(
   '/',
+  [
+    query('page')
+      .optional()
+      .isInt({ gt: 0 })
+      .withMessage('page must be a positive integer'),
+    query('limit')
+      .optional()
+      .isInt({ gt: 0 })
+      .withMessage('limit must be a positive integer'),
+    query('status')
+      .optional()
+      .isIn(['Pending', 'Assigned', 'In Progress', 'Completed'])
+      .withMessage('status filter must be one of Pending, Assigned, In Progress, or Completed'),
+    query('technicianId')
+      .optional()
+      .isMongoId()
+      .withMessage('technicianId must be a valid Mongo ID')
+  ],
+  validate,
   protect,
   authorize('Admin'),
   getAllTickets
@@ -67,6 +101,9 @@ router.put(
     body('technicianId')
       .notEmpty()
       .withMessage('technicianId is required')
+      .bail()
+      .isMongoId()
+      .withMessage('technicianId must be a valid Mongo ID')
   ],
   validate,
   protect,

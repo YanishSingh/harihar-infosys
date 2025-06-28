@@ -1,7 +1,7 @@
 // backend/controllers/ticketController.js
 
 const Ticket = require('../models/Ticket');
-const User = require('../models/User');
+const User   = require('../models/User');
 const { sendEmail } = require('../utils/notificationService');
 
 /**
@@ -22,34 +22,20 @@ function generateTicketNumber() {
 // @route   POST /api/tickets
 // @access  Company
 exports.createTicket = async (req, res) => {
-  const {
-    issueTitle,
-    issueDescription,
-    issueType,
-    branchId,
-    anyDeskId
-  } = req.body;
+  const { issueTitle, issueDescription, issueType, branchId, anyDeskId } = req.body;
 
-  // Only approved Companies can create tickets
   if (req.user.role !== 'Company' || !req.user.isApproved) {
     return res.status(403).json({ message: 'Not authorized to create tickets' });
   }
-
-  // Basic validation
   if (!issueTitle || !issueDescription || !issueType) {
     return res.status(400).json({ message: 'Missing required fields.' });
   }
 
-  // Build branch snapshot if needed
   let branchSnapshot;
   if (issueType === 'Physical') {
-    if (!branchId) {
-      return res.status(400).json({ message: 'branchId is required for Physical tickets.' });
-    }
+    if (!branchId) return res.status(400).json({ message: 'branchId is required for Physical tickets.' });
     const branch = req.user.branches.id(branchId);
-    if (!branch) {
-      return res.status(404).json({ message: 'Branch not found.' });
-    }
+    if (!branch) return res.status(404).json({ message: 'Branch not found.' });
     branchSnapshot = {
       branchId:     branch._id,
       province:     branch.province,
@@ -60,20 +46,17 @@ exports.createTicket = async (req, res) => {
       isHeadOffice: branch.isHeadOffice
     };
   }
-
   if (issueType === 'Remote' && !anyDeskId) {
     return res.status(400).json({ message: 'anyDeskId is required for Remote tickets.' });
   }
 
-  // Generate a unique ticket number
-  let ticketId;
-  let exists;
+  // generate a unique 6-char ticketId
+  let ticketId, exists;
   do {
     ticketId = generateTicketNumber();
     exists = await Ticket.findOne({ ticketId });
   } while (exists);
 
-  // Create the ticket with custom ticketId
   const ticket = await Ticket.create({
     ticketId,
     company:     req.user._id,
@@ -85,7 +68,6 @@ exports.createTicket = async (req, res) => {
     anyDeskId
   });
 
-  // Notify Admin of new ticket
   if (process.env.ADMIN_EMAIL) {
     const subject = `Ticket [${ticket.ticketId}] - ${ticket.issueTitle}`;
     let html = `
@@ -118,35 +100,65 @@ Issue Type: ${ticket.issueType}
       text += `Branch: ${b.province}, ${b.city}, ${b.municipality}, ${b.place} (Phone: ${b.phone})\n`;
     }
 
-    sendEmail({
-      to: process.env.ADMIN_EMAIL,
-      subject,
-      text,
-      html
-    }).catch(console.error);
+    sendEmail({ to: process.env.ADMIN_EMAIL, subject, text, html }).catch(console.error);
   }
 
   res.status(201).json(ticket);
 };
 
-// @desc    Company views their tickets
+// @desc    Company views their tickets (paginated & filterable by status)
 // @route   GET /api/tickets/company
 // @access  Company
 exports.getCompanyTickets = async (req, res) => {
-  const tickets = await Ticket.find({ company: req.user._id }).sort('-createdAt');
-  res.json(tickets);
+  let { page = 1, limit = 10, status } = req.query;
+  page  = parseInt(page,  10);
+  limit = parseInt(limit, 10);
+
+  const filter = { company: req.user._id };
+  if (status) filter.status = status;
+
+  const total = await Ticket.countDocuments(filter);
+  const tickets = await Ticket
+    .find(filter)
+    .sort('-createdAt')
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  res.json({
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    data: tickets
+  });
 };
 
-// @desc    Admin views all tickets
+// @desc    Admin views all tickets (paginated & filterable by status & technician)
 // @route   GET /api/tickets
 // @access  Admin
 exports.getAllTickets = async (req, res) => {
+  let { page = 1, limit = 10, status, technicianId } = req.query;
+  page  = parseInt(page,  10);
+  limit = parseInt(limit, 10);
+
+  const filter = {};
+  if (status)       filter.status     = status;
+  if (technicianId) filter.assignedTo = technicianId;
+
+  const total = await Ticket.countDocuments(filter);
   const tickets = await Ticket
-    .find()
+    .find(filter)
     .populate('company', 'companyName')
     .populate('assignedTo', 'name')
-    .sort('-createdAt');
-  res.json(tickets);
+    .sort('-createdAt')
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  res.json({
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    data: tickets
+  });
 };
 
 // @desc    Admin assigns a technician
@@ -155,9 +167,7 @@ exports.getAllTickets = async (req, res) => {
 exports.assignTicket = async (req, res) => {
   const { technicianId } = req.body;
   const ticket = await Ticket.findById(req.params.id);
-  if (!ticket) {
-    return res.status(404).json({ message: 'Ticket not found' });
-  }
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
 
   ticket.assignedTo = technicianId;
   ticket.status     = 'Assigned';
@@ -167,7 +177,6 @@ exports.assignTicket = async (req, res) => {
   });
   await ticket.save();
 
-  // Notify Technician
   try {
     const techUser = await User.findById(technicianId);
     if (techUser && techUser.email) {
@@ -191,9 +200,7 @@ exports.assignTicket = async (req, res) => {
 exports.updateTicketStatus = async (req, res) => {
   const { status, updateNote } = req.body;
   const ticket = await Ticket.findById(req.params.id);
-  if (!ticket) {
-    return res.status(404).json({ message: 'Ticket not found' });
-  }
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
   if (req.user.role !== 'Technician') {
     return res.status(403).json({ message: 'Not authorized to update status' });
   }
@@ -205,7 +212,6 @@ exports.updateTicketStatus = async (req, res) => {
   });
   await ticket.save();
 
-  // Notify Company of status change
   try {
     const companyUser = await User.findById(ticket.company);
     if (companyUser && companyUser.email) {
