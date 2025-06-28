@@ -1,7 +1,7 @@
 // backend/routes/adminRoutes.js
 
 const express = require('express');
-const { param } = require('express-validator');
+const { query, param } = require('express-validator');
 const router = express.Router();
 const { protect, authorize } = require('../middleware/authMiddleware');
 const { validate } = require('../middleware/validateMiddleware');
@@ -14,12 +14,28 @@ const {
 // All routes are Admin-only
 router.use(protect, authorize('Admin'));
 
-// List pending companies
-// GET /api/admin/companies
-router.get('/companies', listPendingCompanies);
+// List pending companies (with pagination & optional search)
+router.get(
+  '/companies',
+  [
+    query('page')
+      .optional()
+      .isInt({ gt: 0 })
+      .withMessage('page must be a positive integer'),
+    query('limit')
+      .optional()
+      .isInt({ gt: 0 })
+      .withMessage('limit must be a positive integer'),
+    query('search')
+      .optional()
+      .isString()
+      .withMessage('search must be a string')
+  ],
+  validate,
+  listPendingCompanies
+);
 
 // Approve a company
-// PUT /api/admin/companies/:companyId/approve
 router.put(
   '/companies/:companyId/approve',
   [
@@ -32,7 +48,6 @@ router.put(
 );
 
 // Reject & delete a company
-// DELETE /api/admin/companies/:companyId
 router.delete(
   '/companies/:companyId',
   [

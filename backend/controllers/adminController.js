@@ -1,14 +1,39 @@
 // backend/controllers/adminController.js
 
 const User = require('../models/User');
+const { sendEmail } = require('../utils/notificationService');
 
-// @desc    List all pending companies
-// @route   GET /api/admin/companies
-// @access  Admin
+/**
+ * @desc    List pending companies with pagination & optional search
+ * @route   GET /api/admin/companies
+ * @access  Admin
+ */
 exports.listPendingCompanies = async (req, res) => {
-  const companies = await User.find({ role: 'Company', isApproved: false })
-    .select('-password');
-  res.json(companies);
+  let { page = 1, limit = 10, search = '' } = req.query;
+  page  = parseInt(page,  10);
+  limit = parseInt(limit, 10);
+
+  // Base filter: only companies awaiting approval
+  const filter = { role: 'Company', isApproved: false };
+  if (search) {
+    // case-insensitive search on companyName
+    filter.companyName = { $regex: search, $options: 'i' };
+  }
+
+  const total = await User.countDocuments(filter);
+  const companies = await User
+    .find(filter)
+    .select('-password')
+    .sort('-createdAt')
+    .skip((page - 1) * limit)
+    .limit(limit);
+
+  res.json({
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    data: companies
+  });
 };
 
 // @desc    Approve a company
@@ -21,17 +46,18 @@ exports.approveCompany = async (req, res) => {
   }
   company.isApproved = true;
   await company.save();
-  res.json({ message: 'Company approved' })
-  // ─── Send notification to Company ───────────────────────────────────────
-  const { sendEmail } = require('../utils/notificationService');
-  sendEmail({
-    to: company.email,
-    subject: 'Your Company Has Been Approved',
-    text: `Congratulations! Your company "${company.companyName}" is now approved.`,
-    html: `<p>Congratulations! Your company "<b>${company.companyName}</b>" is now approved.</p>`
- }).catch(console.error);
- // ───────────────────────────────────────────────────────────────────────
 
+  // Send notification to Company
+  if (process.env.ADMIN_EMAIL && company.email) {
+    sendEmail({
+      to: company.email,
+      subject: `Your Company "${company.companyName}" Has Been Approved`,
+      text: `Congratulations! Your company "${company.companyName}" is now approved.`,
+      html: `<p>Congratulations! Your company "<strong>${company.companyName}</strong>" is now approved.</p>`
+    }).catch(console.error);
+  }
+
+  res.json({ message: 'Company approved' });
 };
 
 // @desc    Reject (delete) a pending company
