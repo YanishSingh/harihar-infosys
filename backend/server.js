@@ -10,6 +10,9 @@ const userRoutes   = require('./routes/userRoutes');
 const adminRoutes  = require('./routes/adminRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
 
+// ─── ERROR HANDLERS ────────────────────────────────────────────────────────
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+
 mongoose.set('strictQuery', false);          // silence deprecation warning
 
 const app = express();
@@ -24,17 +27,14 @@ app.use('/api/user',    userRoutes);
 app.use('/api/admin',   adminRoutes);
 app.use('/api/tickets', ticketRoutes);
 
-app.get('/', (_, res) => res.send('Harihar Infosys Backend Running...'));
+// Health-check
+app.get('/', (_req, res) => res.send('Harihar Infosys Backend Running...'));
 
-// ─── ERROR HANDLERS ────────────────────────────────────────────────────────
-app.use((req, res) => {                       // 404
-  res.status(404).json({ message: 'Route not found' });
-});
+// ─── 404 NOT FOUND ─────────────────────────────────────────────────────────
+app.use(notFound);
 
-app.use((err, req, res, _next) => {           // 500
-  console.error(err.stack);
-  res.status(500).json({ message: 'Something broke!' });
-});
+// ─── GLOBAL ERROR HANDLER ─────────────────────────────────────────────────
+app.use(errorHandler);
 
 // ─── DATABASE & SERVER BOOTSTRAP ───────────────────────────────────────────
 const PORT      = process.env.PORT      || 5000;
