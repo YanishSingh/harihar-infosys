@@ -1,5 +1,3 @@
-// routes/authRoutes.js
-
 const express = require('express');
 const { body } = require('express-validator');
 const router = express.Router();
@@ -10,38 +8,49 @@ const {
   getMe,
   logoutUser
 } = require('../controllers/authController');
-
 const { validate } = require('../middleware/validateMiddleware');
-const { protect } = require('../middleware/authMiddleware');
+const { protect }  = require('../middleware/authMiddleware');
 
-// ─── Registration endpoint ────────────────────────────────────────────────
+// Registration
 router.post(
   '/register',
   [
     body('role')
-      .isIn(['Admin', 'Technician', 'Company'])
-      .withMessage('role must be one of Admin, Technician, or Company'),
-    body('name').notEmpty().withMessage('name is required'),
-    body('phone').notEmpty().withMessage('phone is required'),
+      .isIn(['Admin','Technician','Company'])
+      .withMessage('role must be Admin, Technician or Company'),
+    body('name')
+      .notEmpty()
+      .withMessage('Full Name is required'),
+    body('phone')
+      .notEmpty()
+      .withMessage('Phone Number is required'),
+    body('email')
+      .isEmail()
+      .withMessage('Valid email is required'),
     body('password')
       .isLength({ min: 6 })
-      .withMessage('password must be at least 6 characters'),
+      .withMessage('Password must be at least 6 characters'),
     body('confirmPassword')
       .custom((val, { req }) => val === req.body.password)
-      .withMessage('passwords must match'),
-    body('email').isEmail().withMessage('valid email is required'),
+      .withMessage('Passwords must match'),
+
+    // Company fields
     body('companyName')
       .if(body('role').equals('Company'))
       .notEmpty()
-      .withMessage('companyName is required for Company'),
+      .withMessage('Company Name is required'),
+    body('businessType')
+      .if(body('role').equals('Company'))
+      .notEmpty()
+      .withMessage('Business Type is required'),
     body('vatOrPan')
       .if(body('role').equals('Company'))
       .notEmpty()
-      .withMessage('vatOrPan is required for Company'),
+      .withMessage('PAN/VAT Number is required'),
     body('branches')
       .if(body('role').equals('Company'))
       .isArray({ min: 1 })
-      .withMessage('branches must be an array with at least one entry'),
+      .withMessage('Branches array is required'),
     body('branches.*.province')
       .if(body('role').equals('Company'))
       .notEmpty()
@@ -65,27 +74,27 @@ router.post(
     body('branches.*.isHeadOffice')
       .if(body('role').equals('Company'))
       .isBoolean()
-      .withMessage('isHeadOffice flag is required for each branch'),
+      .withMessage('isHeadOffice flag is required for each branch')
   ],
   validate,
   registerUser
 );
 
-// ─── Login endpoint ────────────────────────────────────────────────────────
+// Login
 router.post(
   '/login',
   [
-    body('email').isEmail().withMessage('valid email is required'),
-    body('password').notEmpty().withMessage('password is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required')
   ],
   validate,
   authUser
 );
 
-// ─── Get current user ──────────────────────────────────────────────────────
+// Current user
 router.get('/me', protect, getMe);
 
-// ─── Logout endpoint ───────────────────────────────────────────────────────
+// Logout
 router.post('/logout', protect, logoutUser);
 
 module.exports = router;

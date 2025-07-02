@@ -1,8 +1,6 @@
-// backend/models/User.js
-
 const mongoose = require('mongoose');
 
-// Sub‐schema for each branch office
+// Sub-schema for each branch office
 const branchSchema = new mongoose.Schema({
   province: {
     type: String,
@@ -22,7 +20,7 @@ const branchSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    required: true  // branch‐specific phone
+    required: true  // branch-specific phone
   },
   isHeadOffice: {
     type: Boolean,
@@ -45,19 +43,18 @@ const userSchema = new mongoose.Schema({
     required: true
   },
 
-  // Common fields
+  // Common
   name:     { type: String, required: true },
-  email:    {
-    type: String,
-    required: function() { return this.role !== 'Company'; },
-    unique: true,
-    sparse: true
-  },
+  email:    { type: String, required: true, unique: true },
   phone:    { type: String, required: true },
   password: { type: String, required: true },
 
-  // Company‐specific
+  // Company-specific
   companyName: {
+    type: String,
+    required: function() { return this.role === 'Company'; }
+  },
+  businessType: {
     type: String,
     required: function() { return this.role === 'Company'; }
   },
@@ -66,19 +63,17 @@ const userSchema = new mongoose.Schema({
     required: function() { return this.role === 'Company'; }
   },
   branches: {
-    type: [ branchSchema ],
-    required: function() { return this.role === 'Company'; },
-    validate: [ branchesValidator, 'Companies must have at least one branch and exactly one head office.' ]
+    type: [branchSchema],
+    validate: [branchesValidator, 'Companies must have at least one branch and exactly one head office.']
   },
 
-  // Approval flag
+  // Approval
   isApproved: {
     type: Boolean,
     default: function() {
       return this.role !== 'Company';
     }
   }
-
 }, {
   timestamps: true
 });
