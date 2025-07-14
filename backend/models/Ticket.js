@@ -1,5 +1,3 @@
-// backend/models/Ticket.js
-
 const mongoose = require('mongoose');
 const { v4: uuidv4 } = require('uuid');
 
@@ -30,6 +28,11 @@ const ticketSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  requestorName: {
+    type: String,
+    required: true,
+    trim: true
+  },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
@@ -47,19 +50,14 @@ const ticketSchema = new mongoose.Schema({
     enum: ['Remote', 'Physical'],
     required: true
   },
-
-  // For Physical issues: snapshot of the chosen branch
   branch: {
     type: branchSnapshotSchema,
     required: function() { return this.issueType === 'Physical'; }
   },
-
-  // For Remote issues: AnyDesk ID provided by the user
   anyDeskId: {
     type: String,
     required: function() { return this.issueType === 'Remote'; }
   },
-
   status: {
     type: String,
     enum: ['Pending', 'Assigned', 'In Progress', 'Completed'],
@@ -75,7 +73,8 @@ const ticketSchema = new mongoose.Schema({
       timestamp: {
         type: Date,
         default: Date.now
-      }
+      },
+      displayName: String
     }
   ]
 }, {

@@ -10,6 +10,9 @@ const authRoutes   = require('./routes/authRoutes');
 const userRoutes   = require('./routes/userRoutes');
 const adminRoutes  = require('./routes/adminRoutes');
 const ticketRoutes = require('./routes/ticketRoutes');
+const technicianRoutes = require('./routes/technicianRoutes');
+
+
 
 // ─── ERROR HANDLERS ────────────────────────────────────────────────────────
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
@@ -17,24 +20,26 @@ const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 const app = express();
 
 // ─── CORS + COOKIES + BODY PARSING ────────────────────────────────────────
-// 1) CORS must allow your frontend origin and credentials
 const CLIENT_ORIGIN = process.env.CLIENT_URL || 'http://localhost:5173';
 app.use(cors({
   origin: CLIENT_ORIGIN,
   credentials: true,
 }));
 
-// 2) Parse cookies on incoming requests
 app.use(cookieParser());
-
-// 3) Parse JSON bodies
 app.use(express.json());
 
 // ─── MOUNT ROUTES ─────────────────────────────────────────────────────────
 app.use('/api/auth',    authRoutes);
-app.use('/api/user',    userRoutes);
+app.use('/api/users',   userRoutes);  
 app.use('/api/admin',   adminRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/companies', userRoutes);
+app.use('/api/technician', technicianRoutes);
+
+
+
+
 
 // Health check
 app.get('/', (_req, res) => res.send('Harihar Infosys Backend Running...'));

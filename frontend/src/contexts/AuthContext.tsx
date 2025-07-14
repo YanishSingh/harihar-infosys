@@ -5,16 +5,14 @@ import {
   register as apiRegister,
   me as apiMe,
   logout as apiLogout,
-  User,
-  LoginPayload,
-  RegisterPayload
 } from '../api/auth';
+import type { User, LoginPayload, RegisterPayload } from '../api/auth';
+import api from '../utils/axiosConfig'; // Needed for token attach below
 
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  // login now returns the User so callers can inspect .role immediately
-  login: (creds: LoginPayload) => Promise<User>;
+  login: (creds: LoginPayload) => Promise<{ user: User }>;
   register: (creds: RegisterPayload) => Promise<void>;
   logout: () => Promise<void>;
 }
@@ -22,39 +20,66 @@ interface AuthContextValue {
 export const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
-  // default stub returns dummy user shape—won’t actually be called
-  login: async () =>
-    ({ _id: '', name: '', email: '', role: 'Admin' } as User),
+  login: async () => ({
+    user: {
+      _id: '',
+      name: '',
+      email: '',
+      role: 'Admin',
+      phone: '',
+    }
+  }),
   register: async () => {},
-  logout: async () => {}
+  logout: async () => {},
 });
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser]     = useState<User | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // On mount, fetch current user
+  // Ensure axios always sends the token if present
+  function setAxiosAuthToken(token?: string | null) {
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete api.defaults.headers.common['Authorization'];
+    }
+  }
+
+  // On mount, restore token from localStorage if present
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    setAxiosAuthToken(token);
+
     apiMe()
       .then(data => setUser(data.user))
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
 
-  // Return the user so callers (e.g. Login.tsx) can redirect on role
-  const login = async (creds: LoginPayload): Promise<User> => {
-    const { user } = await apiLogin(creds);
-    setUser(user);
-    return user;
+  const login = async (creds: LoginPayload): Promise<{ user: User }> => {
+    const result = await apiLogin(creds); // will throw if response is invalid
+    if (!result || !result.user) {
+      throw new Error('Login failed: Invalid server response');
+    }
+    // Save token for future requests
+    if (result.user.token) {
+      localStorage.setItem('token', result.user.token);
+      setAxiosAuthToken(result.user.token);
+    }
+    setUser(result.user);
+    return result;
   };
 
-  const register = async (creds: RegisterPayload) => {
-    const { user } = await apiRegister(creds);
-    setUser(user);
+  const register = async (creds: RegisterPayload): Promise<void> => {
+    await apiRegister(creds);
+    // Do NOT auto-login on register
   };
 
-  const logout = async () => {
+  const logout = async (): Promise<void> => {
     await apiLogout();
+    localStorage.removeItem('token');
+    setAxiosAuthToken(null);
     setUser(null);
   };
 

@@ -1,7 +1,6 @@
-// backend/controllers/ticketController.js
-
+const mongoose = require('mongoose');
 const Ticket = require('../models/Ticket');
-const User   = require('../models/User');
+const User = require('../models/User');
 const { sendEmail } = require('../utils/notificationService');
 
 /**
@@ -22,12 +21,12 @@ function generateTicketNumber() {
 // @route   POST /api/tickets
 // @access  Company
 exports.createTicket = async (req, res) => {
-  const { issueTitle, issueDescription, issueType, branchId, anyDeskId } = req.body;
+  const { issueTitle, issueDescription, issueType, branchId, anyDeskId, requestorName } = req.body;
 
   if (req.user.role !== 'Company' || !req.user.isApproved) {
     return res.status(403).json({ message: 'Not authorized to create tickets' });
   }
-  if (!issueTitle || !issueDescription || !issueType) {
+  if (!issueTitle || !issueDescription || !issueType || !requestorName) {
     return res.status(400).json({ message: 'Missing required fields.' });
   }
 
@@ -37,12 +36,12 @@ exports.createTicket = async (req, res) => {
     const branch = req.user.branches.id(branchId);
     if (!branch) return res.status(404).json({ message: 'Branch not found.' });
     branchSnapshot = {
-      branchId:     branch._id,
-      province:     branch.province,
-      city:         branch.city,
+      branchId: branch._id,
+      province: branch.province,
+      city: branch.city,
       municipality: branch.municipality,
-      place:        branch.place,
-      phone:        branch.phone,
+      place: branch.place,
+      phone: branch.phone,
       isHeadOffice: branch.isHeadOffice
     };
   }
@@ -50,7 +49,6 @@ exports.createTicket = async (req, res) => {
     return res.status(400).json({ message: 'anyDeskId is required for Remote tickets.' });
   }
 
-  // generate a unique 6-char ticketId
   let ticketId, exists;
   do {
     ticketId = generateTicketNumber();
@@ -59,15 +57,17 @@ exports.createTicket = async (req, res) => {
 
   const ticket = await Ticket.create({
     ticketId,
-    company:     req.user._id,
+    company: req.user._id,
     generatedBy: req.user._id,
+    requestorName,
     issueTitle,
     issueDescription,
     issueType,
-    branch:      branchSnapshot,
+    branch: branchSnapshot,
     anyDeskId
   });
 
+  // Optionally: send an email to admin when ticket is created (not required for core logic)
   if (process.env.ADMIN_EMAIL) {
     const subject = `Ticket [${ticket.ticketId}] - ${ticket.issueTitle}`;
     let html = `
@@ -76,6 +76,7 @@ exports.createTicket = async (req, res) => {
       <p><strong>Ticket Number:</strong> ${ticket.ticketId}</p>
       <p><strong>Title:</strong> ${ticket.issueTitle}</p>
       <p><strong>Description:</strong> ${ticket.issueDescription}</p>
+      <p><strong>Person Facing Issue:</strong> ${ticket.requestorName}</p>
       <p><strong>Issue Type:</strong> ${ticket.issueType}</p>
     `;
     let text = `
@@ -83,6 +84,7 @@ Company: ${req.user.companyName}
 Ticket Number: ${ticket.ticketId}
 Title: ${ticket.issueTitle}
 Description: ${ticket.issueDescription}
+Person Facing Issue: ${ticket.requestorName}
 Issue Type: ${ticket.issueType}
 `;
 
@@ -111,7 +113,7 @@ Issue Type: ${ticket.issueType}
 // @access  Company
 exports.getCompanyTickets = async (req, res) => {
   let { page = 1, limit = 10, status } = req.query;
-  page  = parseInt(page,  10);
+  page = parseInt(page, 10);
   limit = parseInt(limit, 10);
 
   const filter = { company: req.user._id };
@@ -122,7 +124,9 @@ exports.getCompanyTickets = async (req, res) => {
     .find(filter)
     .sort('-createdAt')
     .skip((page - 1) * limit)
-    .limit(limit);
+    .limit(limit)
+    .populate('assignedTo', 'name')
+    .populate('logs.updatedBy', 'name');
 
   res.json({
     total,
@@ -132,17 +136,18 @@ exports.getCompanyTickets = async (req, res) => {
   });
 };
 
-// @desc    Admin views all tickets (paginated & filterable by status & technician)
+// @desc    Admin views all tickets (paginated & filterable by status, technician, company)
 // @route   GET /api/tickets
 // @access  Admin
 exports.getAllTickets = async (req, res) => {
-  let { page = 1, limit = 10, status, technicianId } = req.query;
-  page  = parseInt(page,  10);
+  let { page = 1, limit = 10, status, technicianId, companyId } = req.query;
+  page = parseInt(page, 10);
   limit = parseInt(limit, 10);
 
   const filter = {};
-  if (status)       filter.status     = status;
+  if (status) filter.status = status;
   if (technicianId) filter.assignedTo = technicianId;
+  if (companyId) filter.company = companyId; // <-- THIS LINE ADDED
 
   const total = await Ticket.countDocuments(filter);
   const tickets = await Ticket
@@ -161,6 +166,32 @@ exports.getAllTickets = async (req, res) => {
   });
 };
 
+
+// @desc    Get single ticket by ID (for admin, technician, or company that owns the ticket)
+// @route   GET /api/tickets/:id
+// @access  Admin, Technician (assigned), Company (owns ticket)
+exports.getTicketById = async (req, res) => {
+  const ticketId = req.params.id;
+
+  const ticket = await Ticket.findById(ticketId)
+    .populate('assignedTo', 'name email')
+    .populate('company', 'companyName email')
+    .populate('logs.updatedBy', 'name email');
+
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+
+  const user = req.user;
+  if (
+    user.role === 'Admin' ||
+    (user.role === 'Technician' && ticket.assignedTo && ticket.assignedTo._id.equals(user._id)) ||
+    (user.role === 'Company' && ticket.company && ticket.company._id.equals(user._id))
+  ) {
+    return res.json(ticket);
+  }
+
+  return res.status(403).json({ message: "Not authorized to view this ticket" });
+};
+
 // @desc    Admin assigns a technician
 // @route   PUT /api/tickets/:id/assign
 // @access  Admin
@@ -169,16 +200,18 @@ exports.assignTicket = async (req, res) => {
   const ticket = await Ticket.findById(req.params.id);
   if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
 
+  const techUser = await User.findById(technicianId);
   ticket.assignedTo = technicianId;
-  ticket.status     = 'Assigned';
+  ticket.status = 'Assigned';
+
+  const techName = techUser ? techUser.name : technicianId;
   ticket.logs.push({
     updatedBy: req.user._id,
-    updateNote: `Assigned to technician ${technicianId}`
+    updateNote: `Assigned to technician ${techName}`
   });
   await ticket.save();
 
   try {
-    const techUser = await User.findById(technicianId);
     if (techUser && techUser.email) {
       await sendEmail({
         to: techUser.email,
@@ -191,6 +224,23 @@ exports.assignTicket = async (req, res) => {
     console.error('Error sending assignment email:', err);
   }
 
+  res.json(ticket);
+};
+
+// @desc    Admin changes ticket status
+// @route   PATCH /api/tickets/:id/status
+// @access  Admin
+exports.changeStatus = async (req, res) => {
+  const { status } = req.body;
+  const ticket = await Ticket.findById(req.params.id);
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+  ticket.status = status;
+  ticket.logs.push({
+    updatedBy: req.user._id,
+    updateNote: `Status updated to "${status}"`,
+    timestamp: new Date(),
+  });
+  await ticket.save();
   res.json(ticket);
 };
 
@@ -208,24 +258,68 @@ exports.updateTicketStatus = async (req, res) => {
   ticket.status = status;
   ticket.logs.push({
     updatedBy: req.user._id,
-    updateNote
+    updateNote,
+    displayName: req.user.name,
+    timestamp: new Date(),
   });
   await ticket.save();
 
-  try {
-    const companyUser = await User.findById(ticket.company);
-    if (companyUser && companyUser.email) {
-      await sendEmail({
-        to: companyUser.email,
-        subject: `Ticket [${ticket.ticketId}] Status Updated to "${status}"`,
-        text: `Your ticket ${ticket.ticketId} status has been updated to "${status}".\n\nNote: ${updateNote}`,
-        html: `<p>Your ticket <b>${ticket.ticketId}</b> status has been updated to "<strong>${status}</strong>".</p>
-               <p>Note: ${updateNote}</p>`
-      });
-    }
-  } catch (err) {
-    console.error('Error sending status update email:', err);
-  }
+  // Email to company, if needed
 
   res.json(ticket);
+};
+
+// --- Add a log/update to a ticket ---
+exports.addTicketLog = async (req, res) => {
+  const ticketId = req.params.id;
+  const { updateNote, displayName } = req.body;
+  const user = req.user;
+
+  if (!updateNote || !updateNote.trim()) {
+    return res.status(400).json({ message: 'Update note required.' });
+  }
+
+  // Fetch ticket and company/requestor info
+  const ticket = await Ticket.findById(ticketId)
+    .populate('company', '_id companyName')
+    .populate('assignedTo', '_id');
+
+  if (!ticket) return res.status(404).json({ message: 'Ticket not found' });
+
+  const canCompany =
+    user.role === 'Company' &&
+    ticket.company &&
+    ticket.company._id.equals(user._id) &&
+    ['Assigned', 'In Progress', 'Completed'].includes(ticket.status);
+
+  const canTechnician =
+    user.role === 'Technician' &&
+    ticket.assignedTo &&
+    ticket.assignedTo._id.equals(user._id);
+
+  const canAdmin = user.role === 'Admin';
+
+  if (!(canCompany || canTechnician || canAdmin)) {
+    return res.status(403).json({ message: 'Not authorized to add logs for this ticket' });
+  }
+
+  // --- Use displayName from request, else fallback logic ---
+  let finalDisplayName = displayName && displayName.trim();
+  if (!finalDisplayName) {
+    if (user.role === 'Company') {
+      finalDisplayName = ticket.requestorName || ticket.company?.companyName || user.name;
+    } else {
+      finalDisplayName = user.name;
+    }
+  }
+
+  ticket.logs.push({
+    updatedBy: user._id,
+    displayName: finalDisplayName,
+    updateNote,
+    timestamp: new Date(),
+  });
+  await ticket.save();
+
+  res.status(201).json({ message: 'Log added', log: ticket.logs[ticket.logs.length - 1] });
 };

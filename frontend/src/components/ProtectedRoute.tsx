@@ -4,7 +4,7 @@ import { Navigate, Outlet } from 'react-router-dom';
 import { AuthContext } from '../contexts/AuthContext';
 
 interface ProtectedRouteProps {
-  allowedRoles?: Array<'Admin' | 'Company'>;
+  allowedRoles?: Array<'Admin' | 'Company' | 'Technician'>;
 }
 
 export default function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {

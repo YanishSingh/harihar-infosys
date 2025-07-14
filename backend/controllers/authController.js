@@ -44,10 +44,37 @@ exports.registerUser = async (req, res) => {
     }
     const user = await User.create(data);
 
-    // Optionally notify admin…
+    // ────── ADMIN EMAIL NOTIFICATION ──────
     if (role === 'Company' && process.env.ADMIN_EMAIL) {
-      sendEmail({ /* … */ }).catch(console.error);
+      sendEmail({
+        to: process.env.ADMIN_EMAIL,
+        subject: `New Company Registered: ${user.companyName}`,
+        text: `A new company "${user.companyName}" (VAT/PAN: ${user.vatOrPan}) was registered by ${user.name} (${user.email}, ${user.phone}).`,
+        html: `
+          <h3>New Company Registration</h3>
+          <ul>
+            <li><b>Name:</b> ${user.name}</li>
+            <li><b>Email:</b> ${user.email}</li>
+            <li><b>Phone:</b> ${user.phone}</li>
+            <li><b>Company Name:</b> ${user.companyName}</li>
+            <li><b>VAT/PAN:</b> ${user.vatOrPan}</li>
+          </ul>
+          <p>Please review and approve the company in the admin dashboard.</p>
+        `
+      }).catch(console.error);
     }
+
+    // (OPTIONAL) ────── SEND EMAIL TO THE COMPANY (uncomment to use) ──────
+    /*
+    if (role === 'Company' && user.email) {
+      sendEmail({
+        to: user.email,
+        subject: `Welcome to Harihar Infosys!`,
+        text: `Thank you for registering your company "${user.companyName}". Our team will review and approve your account soon.`,
+        html: `<p>Thank you for registering your company "<strong>${user.companyName}</strong>". Our team will review your account soon.</p>`
+      }).catch(console.error);
+    }
+    */
 
     // Auto‐login: generate token & set cookie
     const token = generateToken(user._id, user.role);
@@ -55,6 +82,7 @@ exports.registerUser = async (req, res) => {
 
     // Return the user payload
     return res.status(201).json({
+      message: "Registration successful. Please wait for approval.",
       user: {
         _id:         user._id,
         role:        user.role,
