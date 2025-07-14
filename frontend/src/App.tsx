@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthContext } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -14,7 +14,7 @@ import CompanyProfile from './pages/company/CompanyProfile';
 import TechnicianDashboard from './pages/technician/TechnicianDashboard';
 import CompanyLayout from './pages/company/CompanyLayout';
 
-import * as Tooltip from '@radix-ui/react-tooltip'; // <-- Add this line
+import * as Tooltip from '@radix-ui/react-tooltip';
 import TicketDetail from './pages/TicketDetail';
 import AdminLayout from './pages/admin/AdminLayout';
 import Companies from './pages/admin/Companies';
@@ -28,8 +28,12 @@ import TechnicianLayout from './pages/technician/TechnicianLayout';
 import TechnicianTicketsBoard from './pages/technician/TechnicianTicketBoard';
 import TechnicianProfile from './pages/technician/TechnicianProfile';
 
+import LandingPage from './pages/LandingPage';
+import SplashScreen from './components/SplashScreen';
+
 export default function App() {
   const { user, loading } = useContext(AuthContext);
+  const [showSplash, setShowSplash] = useState(true);
 
   if (loading) return <div className="p-4 text-center">Loading…</div>;
 
@@ -43,59 +47,69 @@ export default function App() {
 
   return (
     <Tooltip.Provider delayDuration={100}>
-      <Routes>
-        <Route path="/" element={<Navigate to={dashboardPath} replace />} />
-        <Route
-          path="/login"
-          element={user ? <Navigate to={dashboardPath} replace /> : <Login />}
-        />
-        <Route
-          path="/register"
-          element={user ? <Navigate to={dashboardPath} replace /> : <Register />}
-        />
+      {showSplash ? (
+        <SplashScreen onFinish={() => setShowSplash(false)} />
+      ) : (
+        <Routes>
+          {/* --- LANDING PAGE LOGIC --- */}
+          <Route
+            path="/"
+            element={
+              user
+                ? <Navigate to={dashboardPath} replace />
+                : <LandingPage />
+            }
+          />
+          <Route
+            path="/login"
+            element={user ? <Navigate to={dashboardPath} replace /> : <Login />}
+          />
+          <Route
+            path="/register"
+            element={user ? <Navigate to={dashboardPath} replace /> : <Register />}
+          />
 
-        {/* Admin-only */}
-        <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
-  <Route path="/admin" element={<AdminLayout />}>
-    <Route index element={<AdminDashboard />} />
-    <Route path="tickets/:id" element={<TicketDetail />} />
-    <Route path="/admin/companies" element={<Companies />} />
-    <Route path="/admin/technicians" element={<Technicians />} />
-    <Route path="companies/:id" element={<CompanyDetail />} />
-    <Route path="/admin/tickets" element={<AdminTickets />} />
-    <Route path="/admin/tickets/company/:companyId" element={<CompanyTicketsPage />} />
-    <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
-    <Route path="/admin/technicians/:id" element={<TechnicianDetail />} />
-    <Route path="profile" element={<AdminProfile />} />
-  </Route>
-</Route>
-
-        {/* Technician-only */}
-<Route element={<ProtectedRoute allowedRoles={['Technician']} />}>
-  <Route path="/technician" element={<TechnicianLayout />}>
-    <Route index element={<TechnicianDashboard />} />
-    <Route path="tickets" element={<TechnicianTicketsBoard />} />
-    <Route path="tickets/:id" element={<TicketDetail />} />
-    <Route path="profile" element={<TechnicianProfile />} />
- 
-          
-        </Route>
-</Route>
-
-        {/* Company-only: nested layout */}
-        <Route element={<ProtectedRoute allowedRoles={['Company']} />}>
-          <Route path="/company" element={<CompanyLayout />}>
-            <Route index element={<CompanyDashboard />} />
-            <Route path="create-ticket" element={<CreateTicket />} />
-            <Route path="my-tickets" element={<MyTickets />} />
-            <Route path="profile" element={<CompanyProfile />} />
-            <Route path="tickets/:id" element={<TicketDetail />} />
+          {/* Admin-only */}
+          <Route element={<ProtectedRoute allowedRoles={['Admin']} />}>
+            <Route path="/admin" element={<AdminLayout />}>
+              <Route index element={<AdminDashboard />} />
+              <Route path="tickets/:id" element={<TicketDetail />} />
+              <Route path="/admin/companies" element={<Companies />} />
+              <Route path="/admin/technicians" element={<Technicians />} />
+              <Route path="companies/:id" element={<CompanyDetail />} />
+              <Route path="/admin/tickets" element={<AdminTickets />} />
+              <Route path="/admin/tickets/company/:companyId" element={<CompanyTicketsPage />} />
+              <Route path="/admin/tickets/:ticketId" element={<TicketDetail />} />
+              <Route path="/admin/technicians/:id" element={<TechnicianDetail />} />
+              <Route path="profile" element={<AdminProfile />} />
+            </Route>
           </Route>
-        </Route>
 
-        {/* Catch-all */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Technician-only */}
+          <Route element={<ProtectedRoute allowedRoles={['Technician']} />}>
+            <Route path="/technician" element={<TechnicianLayout />}>
+              <Route index element={<TechnicianDashboard />} />
+              <Route path="tickets" element={<TechnicianTicketsBoard />} />
+              <Route path="tickets/:id" element={<TicketDetail />} />
+              <Route path="profile" element={<TechnicianProfile />} />
+            </Route>
+          </Route>
+
+          {/* Company-only: nested layout */}
+          <Route element={<ProtectedRoute allowedRoles={['Company']} />}>
+            <Route path="/company" element={<CompanyLayout />}>
+              <Route index element={<CompanyDashboard />} />
+              <Route path="create-ticket" element={<CreateTicket />} />
+              <Route path="my-tickets" element={<MyTickets />} />
+              <Route path="profile" element={<CompanyProfile />} />
+              <Route path="tickets/:id" element={<TicketDetail />} />
+            </Route>
+          </Route>
+
+          {/* Catch-all */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      )}
     </Tooltip.Provider>
   );
 }
