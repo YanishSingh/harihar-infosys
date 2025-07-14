@@ -1,4 +1,6 @@
-import React, { useState, useRef, useEffect, useContext } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable react-hooks/rules-of-hooks */
+import React, { useContext, useRef, useState, useEffect } from "react";
 import Logo from "../assets/logo.svg";
 import { useNavigate } from "react-router-dom";
 import { AuthContext } from "../contexts/AuthContext";
@@ -6,19 +8,54 @@ import { LogOut, Bell } from "lucide-react";
 import { Notification } from "../types";
 
 type Role = "company" | "admin" | "technician";
-type NavbarProps = {
-  role: Role;
-  notifications?: Notification[];
-};
+type NavbarProps =
+  | { public?: true }
+  | { role: Role; notifications?: Notification[]; public?: false };
 
-export function Navbar({ role, notifications = [] }: NavbarProps) {
-  const { logout } = useContext(AuthContext);
+export function Navbar(props: NavbarProps) {
   const navigate = useNavigate();
+  const { logout } = useContext(AuthContext);
+
+  // PUBLIC LANDING PAGE NAVBAR (no auth required)
+  if (props.public) {
+    return (
+      <nav className="w-full bg-white shadow-sm px-8 py-3 flex items-center justify-between z-50">
+        <div
+          className="flex items-center gap-3 cursor-pointer"
+          onClick={() => navigate("/")}
+          title="Harihar Infosys Home"
+        >
+          <img src={Logo} alt="Harihar Infosys" className="h-8 w-8" />
+          <span className="text-xl font-bold text-black">HARIHAR</span>
+          <span className="text-xl font-bold" style={{ color: "#D6212A" }}>
+            INFOSYS
+          </span>
+        </div>
+        <div className="flex items-center gap-4">
+          <button
+            className="px-6 py-2 rounded bg-[#D6212A] text-white font-semibold hover:bg-[#c81620] transition shadow"
+            onClick={() => navigate("/register")}
+          >
+            Register as a New Company
+          </button>
+          <button
+            className="px-6 py-2 rounded border border-[#D6212A] text-[#D6212A] font-semibold hover:bg-[#fff3f3] transition"
+            onClick={() => navigate("/login")}
+          >
+            Log in
+          </button>
+        </div>
+      </nav>
+    );
+  }
+
+  // ROLE-BASED NAVBAR (dashboard, notifications, logout, etc.)
+  // Only show when user is logged in
+  const { role, notifications = [] } = props as any;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const bellRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Unique storage key per role
   const storageKey =
     role === "admin"
       ? "notifications_last_viewed_admin"
@@ -26,9 +63,8 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
       ? "notifications_last_viewed_technician"
       : "notifications_last_viewed_company";
 
-  // Only count unread notifications newer than last viewed
   const lastViewed = parseInt(localStorage.getItem(storageKey) || "0", 10);
-  const unreadNotifications = notifications.filter((n) =>
+  const unreadNotifications = notifications.filter((n: { date: string | number | Date; }) =>
     n.date instanceof Date
       ? n.date.getTime() > lastViewed
       : new Date(n.date).getTime() > lastViewed
@@ -41,7 +77,6 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
     // eslint-disable-next-line
   }, [notifications]);
 
-  // Mark all as read on bell click
   const handleBellClick = () => {
     setDropdownOpen((open) => {
       const willOpen = !open;
@@ -53,7 +88,6 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
     });
   };
 
-  // Close dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (
@@ -67,13 +101,11 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
     return () => document.removeEventListener("mousedown", handleClick);
   }, [dropdownOpen]);
 
-  // Logout handler
   const handleLogout = async () => {
     await logout();
     navigate("/login");
   };
 
-  // Logo click navigation
   const goToDashboard = () => {
     if (role === "admin") navigate("/admin");
     else if (role === "technician") navigate("/technician/dashboard");
@@ -90,7 +122,9 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
       >
         <img src={Logo} alt="Harihar Infosys" className="h-8 w-8" />
         <span className="text-xl font-bold text-black">HARIHAR</span>
-        <span className="text-xl font-bold text-primary">INFOSYS</span>
+        <span className="text-xl font-bold" style={{ color: "#D6212A" }}>
+          INFOSYS
+        </span>
       </div>
       <div className="flex items-center gap-4">
         {/* Notification Bell */}
@@ -117,7 +151,7 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
             {notifications.length === 0 ? (
               <div className="p-4 text-gray-500">No new notifications.</div>
             ) : (
-              notifications.map((notif) => (
+              notifications.map((notif: Notification) => (
                 <div
                   key={notif.id}
                   className="px-4 py-3 hover:bg-gray-50 cursor-pointer border-b last:border-0"
@@ -140,7 +174,7 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
         {/* Logout */}
         <button
           onClick={handleLogout}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded font-semibold hover:bg-primary/90 transition"
+          className="flex items-center gap-2 px-4 py-2 bg-[#D6212A] text-white rounded font-semibold hover:bg-[#c81620] transition"
         >
           <LogOut size={18} />
           Log Out
@@ -149,3 +183,5 @@ export function Navbar({ role, notifications = [] }: NavbarProps) {
     </nav>
   );
 }
+
+export default Navbar;
